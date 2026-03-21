@@ -1,0 +1,5 @@
+{
+  "name": "Simulador de Performance de Vendas e Qualidade",
+  "description": "Um simulador interativo para acompanhamento de indicadores de vendas e qualidade com cálculos automáticos de atingimento e pontuação.",
+  "requestFramePermissions": []
+}
