@@ -73,12 +73,12 @@ export default function App() {
     return gap > 0 ? gap : 0;
   };
 
-  const handleInputChange = (id: string, value: string, type: 'sales' | 'quality') => {
+  const handleInputChange = (id: string, value: string, type: 'sales' | 'quality', field: 'real' | 'target') => {
     const numValue = parseFloat(value.replace(',', '.')) || 0;
     if (type === 'sales') {
-      setSalesIndicators(prev => prev.map(ind => ind.id === id ? { ...ind, real: numValue } : ind));
+      setSalesIndicators(prev => prev.map(ind => ind.id === id ? { ...ind, [field]: numValue } : ind));
     } else {
-      setQualityIndicators(prev => prev.map(ind => ind.id === id ? { ...ind, real: numValue } : ind));
+      setQualityIndicators(prev => prev.map(ind => ind.id === id ? { ...ind, [field]: numValue } : ind));
     }
   };
 
@@ -206,13 +206,19 @@ export default function App() {
                         </div>
                         <div className="text-center p-2 md:p-3 text-[10px] md:text-[11px] font-mono border-r border-gray-100">{ind.pontos}</div>
                         <div className="text-center p-2 md:p-3 text-[10px] md:text-[11px] font-mono border-r border-gray-100 bg-gray-50/50">
-                          {ind.target}{ind.isPercentage ? '%' : ''}
+                          <input 
+                            type="text" 
+                            value={ind.target}
+                            onChange={(e) => handleInputChange(ind.id, e.target.value, 'sales', 'target')}
+                            className="w-full text-center bg-transparent border-none focus:ring-0 outline-none text-[10px] md:text-[11px] font-mono font-bold"
+                          />
+                          {ind.isPercentage ? '%' : ''}
                         </div>
                         <div className="p-1 border-r border-gray-100">
                           <input 
                             type="text" 
                             value={ind.real}
-                            onChange={(e) => handleInputChange(ind.id, e.target.value, 'sales')}
+                            onChange={(e) => handleInputChange(ind.id, e.target.value, 'sales', 'real')}
                             className="w-full text-center bg-white border border-gray-200 rounded focus:border-[#EE2E24] outline-none text-[10px] md:text-[11px] font-mono py-1 md:py-1.5 font-bold"
                           />
                         </div>
@@ -280,13 +286,19 @@ export default function App() {
                         </div>
                         <div className="text-center p-2 md:p-3 text-[10px] md:text-[11px] font-mono border-r border-gray-100">{ind.pontos}</div>
                         <div className="text-center p-2 md:p-3 text-[10px] md:text-[11px] font-mono border-r border-gray-100 bg-gray-50/50">
-                          {ind.target}{ind.isPercentage ? '%' : ''}
+                          <input 
+                            type="text" 
+                            value={ind.target}
+                            onChange={(e) => handleInputChange(ind.id, e.target.value, 'quality', 'target')}
+                            className="w-full text-center bg-transparent border-none focus:ring-0 outline-none text-[10px] md:text-[11px] font-mono font-bold"
+                          />
+                          {ind.isPercentage ? '%' : ''}
                         </div>
                         <div className="p-1 border-r border-gray-100">
                           <input 
                             type="text" 
                             value={ind.real}
-                            onChange={(e) => handleInputChange(ind.id, e.target.value, 'quality')}
+                            onChange={(e) => handleInputChange(ind.id, e.target.value, 'quality', 'real')}
                             className="w-full text-center bg-white border border-gray-200 rounded focus:border-[#EE2E24] outline-none text-[10px] md:text-[11px] font-mono py-1 md:py-1.5 font-bold"
                           />
                         </div>
