@@ -91,9 +91,9 @@ export default function App() {
   const finalQualityAting = (totalQualityPontuacao / totalQualityPontos) * 100;
 
   const getClassification = (vendas: number, quali: number) => {
-    if (vendas > 91 && quali > 95) return { label: 'DIAMANTE', color: 'bg-[#00AEEF]', textColor: 'text-white' };
-    if (vendas > 83 && quali > 87) return { label: 'OURO', color: 'bg-[#FFFF00]', textColor: 'text-[#333]' };
-    if (vendas > 69 && quali > 77) return { label: 'PRATA', color: 'bg-[#CCCCCC]', textColor: 'text-[#333]' };
+    if (vendas > 91 && quali > 91) return { label: 'DIAMANTE', color: 'bg-[#00AEEF]', textColor: 'text-white' };
+    if (vendas > 81 && quali > 80) return { label: 'OURO', color: 'bg-[#FFFF00]', textColor: 'text-[#333]' };
+    if (vendas > 62 && quali > 68) return { label: 'PRATA', color: 'bg-[#CCCCCC]', textColor: 'text-[#333]' };
     return { label: 'BRONZE', color: 'bg-[#D96924]', textColor: 'text-white' };
   };
 
@@ -158,19 +158,19 @@ export default function App() {
                 <div className="bg-[#EE2E24] text-white p-2 text-center text-[10px] md:text-xs font-bold uppercase border-b border-white/20">Classificação</div>
                 
                 <div className="p-2 md:p-3 text-center text-xs md:text-sm font-bold border-b border-r border-gray-100">{">"} 91%</div>
-                <div className="p-2 md:p-3 text-center text-xs md:text-sm font-bold border-b border-r border-gray-100">{">"} 95%</div>
+                <div className="p-2 md:p-3 text-center text-xs md:text-sm font-bold border-b border-r border-gray-100">{">"} 91%</div>
                 <div className="p-2 md:p-3 text-center text-xs md:text-sm font-black bg-[#00AEEF] text-white border-b">DIAMANTE</div>
 
-                <div className="p-2 md:p-3 text-center text-xs md:text-sm font-bold border-b border-r border-gray-100">83% a 91%</div>
-                <div className="p-2 md:p-3 text-center text-xs md:text-sm font-bold border-b border-r border-gray-100">87% a 95%</div>
+                <div className="p-2 md:p-3 text-center text-xs md:text-sm font-bold border-b border-r border-gray-100">81% a 91%</div>
+                <div className="p-2 md:p-3 text-center text-xs md:text-sm font-bold border-b border-r border-gray-100">80% a 91%</div>
                 <div className="p-2 md:p-3 text-center text-xs md:text-sm font-black bg-[#FFFF00] text-[#333] border-b">OURO</div>
 
-                <div className="p-2 md:p-3 text-center text-xs md:text-sm font-bold border-b border-r border-gray-100">69% a 83%</div>
-                <div className="p-2 md:p-3 text-center text-xs md:text-sm font-bold border-b border-r border-gray-100">77% a 87%</div>
+                <div className="p-2 md:p-3 text-center text-xs md:text-sm font-bold border-b border-r border-gray-100">62% a 81%</div>
+                <div className="p-2 md:p-3 text-center text-xs md:text-sm font-bold border-b border-r border-gray-100">68% a 80%</div>
                 <div className="p-2 md:p-3 text-center text-xs md:text-sm font-black bg-[#CCCCCC] text-[#333] border-b">PRATA</div>
 
-                <div className="p-2 md:p-3 text-center text-xs md:text-sm font-bold border-r border-gray-100">0% a 69%</div>
-                <div className="p-2 md:p-3 text-center text-xs md:text-sm font-bold border-r border-gray-100">0% a 77%</div>
+                <div className="p-2 md:p-3 text-center text-xs md:text-sm font-bold border-r border-gray-100">0% a 62%</div>
+                <div className="p-2 md:p-3 text-center text-xs md:text-sm font-bold border-r border-gray-100">0% a 68%</div>
                 <div className="p-2 md:p-3 text-center text-xs md:text-sm font-black bg-[#D96924] text-white">BRONZE</div>
               </div>
             </div>
