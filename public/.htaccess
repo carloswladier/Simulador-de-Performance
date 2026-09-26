@@ -1,0 +1,19 @@
+# Apache configuration for Hostinger Web Hosting
+# Simulador de Performance Claro
+
+RewriteEngine On
+
+# 1. Proteger arquivos de configuração JSON e confidenciais
+<FilesMatch "(claro_db_config\.json|\.env|\.git|\.md)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# 2. Redirecionar requisições para a API PHP
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^api/(.*)$ api.php?endpoint=$1 [QSA,L]
+
+# 3. Fallback para Single Page Application (React)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.html [L]
