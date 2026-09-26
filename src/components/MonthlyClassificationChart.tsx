@@ -24,6 +24,7 @@ interface MonthlyClassificationChartProps {
   onSelectMonth: (month: string) => void;
   currentSalesIndicators: Indicator[];
   currentQualityIndicators: Indicator[];
+  currentClassificationResult?: ClassificationResult;
 }
 
 export function MonthlyClassificationChart({
@@ -33,6 +34,7 @@ export function MonthlyClassificationChart({
   onSelectMonth,
   currentSalesIndicators,
   currentQualityIndicators,
+  currentClassificationResult,
 }: MonthlyClassificationChartProps) {
   const [hoveredMonth, setHoveredMonth] = useState<string | null>(null);
 
@@ -50,24 +52,26 @@ export function MonthlyClassificationChart({
     return MONTHS_LIST.map((m) => {
       const isCurrentActive = selectedMonths.includes(m.value);
 
-      // CASO 1: Um único executivo selecionado
+      // CASO PRIORITÁRIO: Se este mês for o mês selecionado no filtro (quando 1 mês selecionado):
+      // A barra DEVE refletir 100% a classificação e indicadores atuais exibidos na tela,
+      // seja para 1 executivo ou para múltiplos executivos (visão consolidada / simulação temporária)!
+      if (isCurrentActive && selectedMonths.length === 1) {
+        const activeRes = currentClassificationResult || calculateClassificationFromIndicators(
+          currentSalesIndicators,
+          currentQualityIndicators
+        );
+        return {
+          monthCode: m.value,
+          monthName: m.label,
+          result: activeRes,
+          isCurrentActive: true,
+          hasRecord: true,
+        };
+      }
+
+      // CASO 1: Um único executivo selecionado (para meses fora do filtro ativo)
       if (isSingleExec) {
         const execId = selectedExecutivoIds[0];
-
-        // Se o mês for o único selecionado no momento, usa os valores da tela
-        if (isCurrentActive && selectedMonths.length === 1) {
-          const currentRes = calculateClassificationFromIndicators(
-            currentSalesIndicators,
-            currentQualityIndicators
-          );
-          return {
-            monthCode: m.value,
-            monthName: m.label,
-            result: currentRes,
-            isCurrentActive: true,
-            hasRecord: true,
-          };
-        }
 
         // Tenta recuperar registro salvo para o executivo e mês
         const record = getPerformanceRecord(execId, m.value);
@@ -215,7 +219,8 @@ export function MonthlyClassificationChart({
     selectedMonths, 
     isSingleExec,
     currentSalesIndicators, 
-    currentQualityIndicators
+    currentQualityIndicators,
+    currentClassificationResult
   ]);
 
   // Contadores de frequência por classificação no ano

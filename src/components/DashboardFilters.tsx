@@ -8,7 +8,9 @@ import {
   CheckCircle2, 
   RotateCcw,
   Sparkles,
-  Layers
+  Layers,
+  Lock,
+  FlaskConical
 } from 'lucide-react';
 import { MultiSelectDropdown, MultiSelectOption } from './MultiSelectDropdown';
 
@@ -29,6 +31,11 @@ interface DashboardFiltersProps {
   lastSavedAt?: string;
   canEdit: boolean;
   isSingleMode: boolean;
+  isSimulationMode?: boolean;
+  canSimulate?: boolean;
+  isSimulationModified?: boolean;
+  onResetSimulation?: () => void;
+  onToggleSimulationMode?: () => void;
 }
 
 export function DashboardFilters({
@@ -48,6 +55,11 @@ export function DashboardFilters({
   lastSavedAt,
   canEdit,
   isSingleMode,
+  isSimulationMode = false,
+  canSimulate = false,
+  isSimulationModified = false,
+  onResetSimulation,
+  onToggleSimulationMode,
 }: DashboardFiltersProps) {
   const isExecutivo = currentUser.perfil === 'executivo';
   const coordenadores = users.filter(u => u.perfil === 'coordenador');
@@ -77,32 +89,54 @@ export function DashboardFilters({
     <div className="bg-white rounded-xl border-2 border-[#EE2E24] p-4 md:p-5 shadow-lg space-y-4">
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-gray-100 pb-3">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-sm md:text-base font-black uppercase text-[#EE2E24] tracking-wider flex items-center gap-2">
               <Sparkles size={16} />
               Filtros da Operação
             </h2>
-            {!isSingleMode && (
+            {isSimulationMode ? (
+              <span className="inline-flex items-center gap-1.5 bg-purple-100 border border-purple-300 text-purple-900 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-xs">
+                <FlaskConical size={12} className="text-purple-700 animate-pulse" />
+                Simulação Temporária ({currentUser.perfil === 'admin' ? 'Admin' : 'Coordenador'})
+              </span>
+            ) : !isSingleMode ? (
               <span className="inline-flex items-center gap-1 bg-amber-100 border border-amber-300 text-amber-900 text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
                 <Layers size={12} />
                 Visão Consolidada ({selectedExecutivoIds.length} exec. / {selectedMonths.length} meses)
               </span>
-            )}
+            ) : null}
           </div>
           <p className="text-[11px] text-gray-500 font-medium">
             Selecione um ou mais Executivos(as) (ou "TODOS") e Meses para acompanhar o desempenho individual ou consolidado
           </p>
         </div>
 
-        {/* Botão de Salvar Indicadores */}
-        <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
-          {lastSavedAt && isSingleMode && (
+        {/* Botão de Salvar Indicadores e Controles de Simulação */}
+        <div className="flex items-center gap-2 w-full lg:w-auto justify-end flex-wrap">
+          {lastSavedAt && isSingleMode && !isSimulationMode && (
             <span className="text-[10px] text-gray-400 font-mono hidden sm:inline-block">
               Salvo em: {lastSavedAt}
             </span>
           )}
 
-          {isSingleMode && (
+          {/* Botão para Coordenador/Admin alternar modo de simulação no modo individual */}
+          {canSimulate && isSingleMode && onToggleSimulationMode && (
+            <button
+              onClick={onToggleSimulationMode}
+              title={isSimulationMode ? "Desativar modo simulação e voltar ao modo com salvamento" : "Ativar modo de simulação temporária (testar valores sem risco de salvar)"}
+              className={`px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all border shadow-xs ${
+                isSimulationMode
+                  ? 'bg-purple-700 text-white border-purple-800'
+                  : 'bg-purple-50 hover:bg-purple-100 text-purple-800 border-purple-200'
+              }`}
+            >
+              <FlaskConical size={14} />
+              <span>{isSimulationMode ? 'Simulação Ativa' : 'Testar Simulação'}</span>
+            </button>
+          )}
+
+          {/* Restaurar valores normais quando em modo individual sem simulação */}
+          {isSingleMode && !isSimulationMode && (
             <button
               onClick={onResetData}
               title="Restaurar valores padrão"
@@ -112,41 +146,65 @@ export function DashboardFilters({
             </button>
           )}
 
-          <button
-            onClick={onSaveData}
-            disabled={!canEdit || !isSingleMode || isSaving}
-            title={
-              !isSingleMode 
-                ? 'Para salvar alterações nos indicadores, selecione apenas 1 executivo(a) e 1 mês' 
-                : 'Salvar alterações deste executivo e mês'
-            }
-            className={`px-4 py-2.5 rounded-lg text-xs md:text-sm font-black flex items-center gap-2 shadow-md transition-all ${
-              !isSingleMode
-                ? 'bg-gray-200 text-gray-500 border border-gray-300 cursor-not-allowed opacity-80'
-                : saveSuccess
-                ? 'bg-emerald-600 text-white cursor-pointer'
-                : hasUnsavedChanges
-                ? 'bg-[#EE2E24] hover:bg-[#c9241b] text-white animate-pulse cursor-pointer'
-                : 'bg-[#EE2E24] hover:bg-[#c9241b] text-white cursor-pointer'
-            } ${isSingleMode ? 'active:scale-95' : ''}`}
-          >
-            {saveSuccess ? (
-              <>
-                <CheckCircle2 size={16} />
-                <span>SALVO COM SUCESSO!</span>
-              </>
-            ) : !isSingleMode ? (
-              <>
-                <Layers size={16} />
-                <span>MODO CONSOLIDADO</span>
-              </>
-            ) : (
-              <>
-                <Save size={16} />
-                <span>{isSaving ? 'SALVANDO...' : 'SALVAR CAMPOS'}</span>
-              </>
-            )}
-          </button>
+          {/* Se estiver em modo de simulação temporária: botão Restaurar Valores Reais */}
+          {isSimulationMode && isSimulationModified && onResetSimulation && (
+            <button
+              onClick={onResetSimulation}
+              title="Restaurar a soma real dos executivos calculada pelo banco"
+              className="px-3 py-2 border-2 border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-900 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors shadow-xs"
+            >
+              <RotateCcw size={14} className="text-purple-700" />
+              <span className="hidden sm:inline">Restaurar Valores Reais</span>
+              <span className="sm:hidden">Restaurar</span>
+            </button>
+          )}
+
+          {/* Botão de Salvar ou Bloqueio de Salvamento em Simulação */}
+          {isSimulationMode ? (
+            <div
+              title="Modo Simulação Temporária ativo: os valores podem ser editados livremente na tela para testar metas e pontuações, mas NÃO podem ser salvos no banco de dados."
+              className="px-4 py-2.5 rounded-lg text-xs md:text-sm font-black flex items-center gap-2 shadow-xs bg-purple-100 text-purple-900 border-2 border-purple-300 cursor-not-allowed select-none"
+            >
+              <Lock size={16} className="text-purple-700 shrink-0" />
+              <span>SIMULAÇÃO (NÃO SALVA)</span>
+            </div>
+          ) : (
+            <button
+              onClick={onSaveData}
+              disabled={!canEdit || !isSingleMode || isSaving}
+              title={
+                !isSingleMode 
+                  ? 'Para salvar alterações nos indicadores, selecione apenas 1 executivo(a) e 1 mês' 
+                  : 'Salvar alterações deste executivo e mês'
+              }
+              className={`px-4 py-2.5 rounded-lg text-xs md:text-sm font-black flex items-center gap-2 shadow-md transition-all ${
+                !isSingleMode
+                  ? 'bg-gray-200 text-gray-500 border border-gray-300 cursor-not-allowed opacity-80'
+                  : saveSuccess
+                  ? 'bg-emerald-600 text-white cursor-pointer'
+                  : hasUnsavedChanges
+                  ? 'bg-[#EE2E24] hover:bg-[#c9241b] text-white animate-pulse cursor-pointer'
+                  : 'bg-[#EE2E24] hover:bg-[#c9241b] text-white cursor-pointer'
+              } ${isSingleMode ? 'active:scale-95' : ''}`}
+            >
+              {saveSuccess ? (
+                <>
+                  <CheckCircle2 size={16} />
+                  <span>SALVO COM SUCESSO!</span>
+                </>
+              ) : !isSingleMode ? (
+                <>
+                  <Layers size={16} />
+                  <span>MODO CONSOLIDADO</span>
+                </>
+              ) : (
+                <>
+                  <Save size={16} />
+                  <span>{isSaving ? 'SALVANDO...' : 'SALVAR CAMPOS'}</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 

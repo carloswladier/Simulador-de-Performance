@@ -28,7 +28,10 @@ import {
   LogOut,
   ShieldCheck,
   Layers,
-  Calculator
+  Calculator,
+  Lock,
+  FlaskConical,
+  RotateCcw
 } from 'lucide-react';
 import { User, Indicator, SavedPerformanceRecord } from './types';
 import { 
@@ -57,6 +60,7 @@ import { HostingerDatabaseConfig } from './components/HostingerDatabaseConfig';
 import { LoginPage } from './components/LoginPage';
 import { MonthlyClassificationChart } from './components/MonthlyClassificationChart';
 import { RvvTab } from './components/RvvTab';
+import { ClassificationResult, getClassificationInfo } from './utils/classification';
 
 const DEFAULT_SALES: Indicator[] = [
   { id: 'bl', label: 'BANDA LARGA *', pontos: 20, target: 15, targetStr: '15', real: 20, realStr: '20', isPercentage: false },
@@ -166,6 +170,21 @@ export default function App() {
   const [salesIndicators, setSalesIndicators] = useState<Indicator[]>(DEFAULT_SALES);
   const [qualityIndicators, setQualityIndicators] = useState<Indicator[]>(DEFAULT_QUALITY);
 
+  // Estados de simulação temporária (Coordenador e Admin na aba Dashboard)
+  const canSimulate = Boolean(isAdmin || isCoordenador);
+  const [isSingleModeSimulating, setIsSingleModeSimulating] = useState(false);
+  const [isSimulationModified, setIsSimulationModified] = useState(false);
+  const [originalConsolidatedSales, setOriginalConsolidatedSales] = useState<Indicator[]>(DEFAULT_SALES);
+  const [originalConsolidatedQuality, setOriginalConsolidatedQuality] = useState<Indicator[]>(DEFAULT_QUALITY);
+
+  // Modo simulação é ativo quando:
+  // 1. O usuário é coordenador ou admin (canSimulate)
+  // 2. E está no modo consolidado (!isSingleMode, ex: todos os executivos selecionados) OU ativou voluntariamente a simulação
+  const isSimulationMode = Boolean(canSimulate && (!isSingleMode || isSingleModeSimulating));
+
+  // Permissão de digitação/edição dos campos nos inputs da Dashboard
+  const canEditInputs = isSingleMode ? true : isSimulationMode;
+
   // Estados de salvamento
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -236,6 +255,8 @@ export default function App() {
 
     // 1. MODO INDIVIDUAL (1 executivo e 1 mês)
     if (isSingleMode) {
+      setIsSimulationModified(false);
+      setIsSingleModeSimulating(false);
       const execId = selectedExecutivoIds[0];
       const mes = selectedMonths[0];
 
@@ -381,6 +402,9 @@ export default function App() {
       };
     });
 
+    setOriginalConsolidatedSales(aggregatedSales);
+    setOriginalConsolidatedQuality(aggregatedQuality);
+    setIsSimulationModified(false);
     setSalesIndicators(aggregatedSales);
     setQualityIndicators(aggregatedQuality);
     setLastSavedAt(undefined);
@@ -439,7 +463,11 @@ export default function App() {
 
   // Salvar registro de performance do Executivo para o Mês selecionado (somente quando 1 executivo e 1 mês selecionados)
   const handleSaveData = async () => {
-    if (!isSingleMode || !singleExecutivoId) return;
+    // BLOQUEIO TOTAL: Nunca permitir salvar no modo de simulação temporária ou consolidado
+    if (isSimulationMode || !isSingleMode || !singleExecutivoId) {
+      console.warn('Salvamento não permitido durante a simulação temporária.');
+      return;
+    }
 
     setIsSaving(true);
     const now = new Date();
@@ -484,6 +512,44 @@ export default function App() {
       setQualityIndicators(DEFAULT_QUALITY);
       setHasUnsavedChanges(true);
     }
+  };
+
+  // Restaurar dados originais da simulação (desfaz alterações simuladas e volta aos valores reais consolidados)
+  const handleResetSimulation = () => {
+    if (isSingleMode) {
+      const execId = selectedExecutivoIds[0];
+      const mes = selectedMonths[0];
+      const saved = getPerformanceRecord(execId, mes);
+      if (saved) {
+        setSalesIndicators(prev => prev.map(ind => {
+          const found = saved.salesIndicators.find(s => s.id === ind.id);
+          return found ? {
+            ...ind,
+            target: found.target,
+            targetStr: found.targetStr ?? found.target.toString(),
+            real: found.real,
+            realStr: found.realStr ?? found.real.toString(),
+          } : ind;
+        }));
+        setQualityIndicators(prev => prev.map(ind => {
+          const found = saved.qualityIndicators.find(q => q.id === ind.id);
+          return found ? {
+            ...ind,
+            target: found.target,
+            targetStr: found.targetStr ?? found.target.toString(),
+            real: found.real,
+            realStr: found.realStr ?? found.real.toString(),
+          } : ind;
+        }));
+      } else {
+        setSalesIndicators(DEFAULT_SALES);
+        setQualityIndicators(DEFAULT_QUALITY);
+      }
+    } else {
+      setSalesIndicators(originalConsolidatedSales);
+      setQualityIndicators(originalConsolidatedQuality);
+    }
+    setIsSimulationModified(false);
   };
 
   // Mapeamento de Ícones
@@ -552,14 +618,19 @@ export default function App() {
   };
 
   const handleInputChange = (id: string, value: string, type: 'sales' | 'quality', field: 'real' | 'target') => {
-    if (!isSingleMode) return; // Em modo consolidado não edita diretamente
+    if (!canEditInputs) return;
 
     const cleanVal = value.replace(',', '.');
     const numValue = parseFloat(cleanVal);
     const parsed = isNaN(numValue) ? 0 : numValue;
     const strField = field === 'real' ? 'realStr' : 'targetStr';
 
-    setHasUnsavedChanges(true);
+    if (isSimulationMode) {
+      setIsSimulationModified(true);
+      setHasUnsavedChanges(false);
+    } else {
+      setHasUnsavedChanges(true);
+    }
 
     if (type === 'sales') {
       setSalesIndicators(prev => prev.map(ind => ind.id === id ? { ...ind, [field]: parsed, [strField]: value } : ind));
@@ -595,6 +666,17 @@ export default function App() {
   };
 
   const classification = getClassification(finalSalesAting, finalQualityAting);
+
+  // Objeto completo de classificação para sincronização perfeita com o gráfico de barras
+  const currentClassificationResult = useMemo<ClassificationResult>(() => {
+    const info = getClassificationInfo(finalSalesAting, finalQualityAting);
+    return {
+      ...info,
+      salesAting: finalSalesAting,
+      qualityAting: finalQualityAting,
+      hasData: true,
+    };
+  }, [finalSalesAting, finalQualityAting]);
 
   // Objetos dos executivos selecionados
   const selectedExecutivosObjects = useMemo(() => {
@@ -838,16 +920,21 @@ export default function App() {
               isSaving={isSaving}
               saveSuccess={saveSuccess}
               lastSavedAt={lastSavedAt}
-              canEdit={true}
+              canEdit={!isSimulationMode}
               isSingleMode={isSingleMode}
+              isSimulationMode={isSimulationMode}
+              canSimulate={canSimulate}
+              isSimulationModified={isSimulationModified}
+              onResetSimulation={handleResetSimulation}
+              onToggleSimulationMode={() => setIsSingleModeSimulating(prev => !prev)}
             />
 
             {/* Banner de Identificação dos Executivos Selecionados */}
             {selectedExecutivosObjects.length > 0 && (
-              <div className={`bg-white border-l-4 ${isSingleMode ? 'border-[#00AEEF]' : 'border-[#EE2E24]'} px-4 py-2.5 rounded-r-xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs text-gray-600 gap-2`}>
+              <div className={`bg-white border-l-4 ${isSimulationMode ? 'border-purple-600' : isSingleMode ? 'border-[#00AEEF]' : 'border-[#EE2E24]'} px-4 py-2.5 rounded-r-xl shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs text-gray-600 gap-2`}>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-gray-900 uppercase">
-                    {isSingleMode ? 'Simulação do(a) Executivo(a): ' : 'Simulação Consolidada: '}
+                    {isSimulationMode ? 'Simulação Temporária: ' : isSingleMode ? 'Simulação do(a) Executivo(a): ' : 'Simulação Consolidada: '}
                   </span>
                   {isSingleMode ? (
                     <>
@@ -863,6 +950,12 @@ export default function App() {
                     <span className="font-black text-[#EE2E24] text-sm bg-red-50 px-2 py-0.5 rounded border border-red-200 flex items-center gap-1.5">
                       <Users size={14} />
                       {selectedExecutivosObjects.length} EXECUTIVOS(AS) SELECIONADOS(AS)
+                    </span>
+                  )}
+                  {isSimulationMode && (
+                    <span className="bg-purple-100 text-purple-900 border border-purple-300 font-black px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1">
+                      <FlaskConical size={11} className="text-purple-600" />
+                      SIMULAÇÃO HABILITADA ({isAdmin ? 'ADMIN' : 'COORDENADOR'})
                     </span>
                   )}
                 </div>
@@ -951,10 +1044,45 @@ export default function App() {
               onSelectMonth={(m) => setSelectedMonths([m])}
               currentSalesIndicators={salesIndicators}
               currentQualityIndicators={qualityIndicators}
+              currentClassificationResult={currentClassificationResult}
             />
 
-            {/* Aviso quando em Modo Consolidado */}
-            {!isSingleMode && (
+            {/* Aviso quando em Modo Simulação ou Modo Consolidado */}
+            {isSimulationMode ? (
+              <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 border-2 border-purple-300 rounded-xl p-3.5 text-xs text-purple-950 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-sm animate-in fade-in duration-200">
+                <div className="flex items-center gap-3">
+                  <div className="bg-purple-200 text-purple-900 p-2 rounded-xl shrink-0 border border-purple-300 shadow-xs">
+                    <FlaskConical size={20} className="text-purple-700 animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-black uppercase tracking-wide text-purple-950 text-xs md:text-sm">
+                        {isSimulationModified ? 'Simulação Temporária Ativa (Valores Modificados)' : 'Modo Simulação Temporária Habilitado'}
+                      </span>
+                      <span className="bg-purple-200/90 text-purple-950 font-black text-[10px] px-2 py-0.5 rounded-md border border-purple-300 flex items-center gap-1">
+                        <Lock size={10} className="text-purple-700" /> Não permite salvar
+                      </span>
+                      <span className="bg-blue-100 text-blue-900 font-extrabold text-[10px] px-2 py-0.5 rounded-md border border-blue-200">
+                        Perfil: {isAdmin ? 'Administrador' : 'Coordenador'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-purple-800 mt-1 leading-relaxed">
+                      Você pode editar livremente qualquer <strong>Target</strong> ou <strong>Real</strong> de Vendas e Qualidade. As pontuações, atingimentos e a <strong>Classificação ({classification.label})</strong> são recalculadas instantaneamente.
+                    </p>
+                  </div>
+                </div>
+                {isSimulationModified && (
+                  <button
+                    onClick={handleResetSimulation}
+                    className="shrink-0 bg-white hover:bg-purple-100 text-purple-900 border-2 border-purple-300 font-black px-3.5 py-2 rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition-all hover:scale-[1.02] active:scale-95"
+                    title="Restaurar a soma real dos executivos calculada pelo banco"
+                  >
+                    <RotateCcw size={14} className="text-purple-700" />
+                    <span>Restaurar Valores Reais</span>
+                  </button>
+                )}
+              </div>
+            ) : !isSingleMode && (
               <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-3 text-xs text-amber-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-xs">
                 <div className="flex items-center gap-2">
                   <div className="bg-amber-200 text-amber-900 p-1.5 rounded-lg shrink-0">
@@ -1013,17 +1141,25 @@ export default function App() {
                                 <input 
                                   type="text" 
                                   value={ind.targetStr ?? ind.target}
-                                  disabled={!isSingleMode}
-                                  readOnly={!isSingleMode}
+                                  disabled={!canEditInputs}
+                                  readOnly={!canEditInputs}
                                   onChange={(e) => handleInputChange(ind.id, e.target.value, 'sales', 'target')}
                                   className={`w-full h-7 text-center rounded text-[10px] md:text-[11px] font-mono font-bold transition-all shadow-xs ${
                                     ind.isPercentage ? 'pr-3.5' : ''
                                   } ${
-                                    !isSingleMode 
+                                    !canEditInputs 
                                       ? 'bg-amber-50/60 border border-amber-200 text-gray-800 cursor-default' 
+                                      : isSimulationMode
+                                      ? 'bg-purple-50/70 border border-purple-300 hover:border-purple-500 focus:border-purple-600 focus:ring-1 focus:ring-purple-600 focus:bg-white text-purple-950 cursor-text'
                                       : 'bg-white border border-gray-300 hover:border-gray-400 focus:border-[#EE2E24] focus:ring-1 focus:ring-[#EE2E24] outline-none'
                                   }`}
-                                  title={!isSingleMode ? 'Valor consolidado (somatório/média dos filtros selecionados)' : 'Clique para editar o target'}
+                                  title={
+                                    !canEditInputs 
+                                      ? 'Valor consolidado (somatório/média dos filtros selecionados)' 
+                                      : isSimulationMode 
+                                      ? 'Simulação Temporária: Clique para editar e testar cenários (não salva no banco)' 
+                                      : 'Clique para editar o target'
+                                  }
                                 />
                                 {ind.isPercentage && (
                                   <span className="absolute right-1 text-[8px] md:text-[9px] text-gray-400 font-bold pointer-events-none">%</span>
@@ -1042,17 +1178,25 @@ export default function App() {
                                 <input 
                                   type="text" 
                                   value={ind.realStr ?? ind.real}
-                                  disabled={!isSingleMode}
-                                  readOnly={!isSingleMode}
+                                  disabled={!canEditInputs}
+                                  readOnly={!canEditInputs}
                                   onChange={(e) => handleInputChange(ind.id, e.target.value, 'sales', 'real')}
                                   className={`w-full h-7 text-center rounded text-[10px] md:text-[11px] font-mono font-bold transition-all shadow-xs ${
                                     ind.isPercentage && ind.id !== 'port' ? 'pr-3.5' : ''
                                   } ${
-                                    !isSingleMode 
+                                    !canEditInputs 
                                       ? 'bg-amber-50/60 border border-amber-200 text-gray-800 cursor-default' 
+                                      : isSimulationMode
+                                      ? 'bg-purple-50/70 border border-purple-300 hover:border-purple-500 focus:border-purple-600 focus:ring-1 focus:ring-purple-600 focus:bg-white text-purple-950 cursor-text'
                                       : 'bg-white border border-gray-300 hover:border-gray-400 focus:border-[#EE2E24] focus:ring-1 focus:ring-[#EE2E24] outline-none'
                                   }`}
-                                  title={!isSingleMode ? 'Valor consolidado (somatório/média dos filtros selecionados)' : 'Clique para editar o valor realizado'}
+                                  title={
+                                    !canEditInputs 
+                                      ? 'Valor consolidado (somatório/média dos filtros selecionados)' 
+                                      : isSimulationMode 
+                                      ? 'Simulação Temporária: Clique para editar e testar cenários (não salva no banco)' 
+                                      : 'Clique para editar o valor realizado'
+                                  }
                                 />
                                 {ind.isPercentage && ind.id !== 'port' && (
                                   <span className="absolute right-1 text-[8px] md:text-[9px] text-gray-400 font-bold pointer-events-none">%</span>
@@ -1159,17 +1303,25 @@ export default function App() {
                                 <input 
                                   type="text" 
                                   value={ind.targetStr ?? ind.target}
-                                  disabled={!isSingleMode}
-                                  readOnly={!isSingleMode}
+                                  disabled={!canEditInputs}
+                                  readOnly={!canEditInputs}
                                   onChange={(e) => handleInputChange(ind.id, e.target.value, 'quality', 'target')}
                                   className={`w-full h-7 text-center rounded text-[10px] md:text-[11px] font-mono font-bold transition-all shadow-xs ${
                                     ind.isPercentage ? 'pr-3.5' : ''
                                   } ${
-                                    !isSingleMode 
+                                    !canEditInputs 
                                       ? 'bg-amber-50/60 border border-amber-200 text-gray-800 cursor-default' 
+                                      : isSimulationMode
+                                      ? 'bg-purple-50/70 border border-purple-300 hover:border-purple-500 focus:border-purple-600 focus:ring-1 focus:ring-purple-600 focus:bg-white text-purple-950 cursor-text'
                                       : 'bg-white border border-gray-300 hover:border-gray-400 focus:border-[#EE2E24] focus:ring-1 focus:ring-[#EE2E24] outline-none'
                                   }`}
-                                  title={!isSingleMode ? 'Valor consolidado (somatório/média dos filtros selecionados)' : 'Clique para editar o target'}
+                                  title={
+                                    !canEditInputs 
+                                      ? 'Valor consolidado (somatório/média dos filtros selecionados)' 
+                                      : isSimulationMode 
+                                      ? 'Simulação Temporária: Clique para editar e testar cenários (não salva no banco)' 
+                                      : 'Clique para editar o target'
+                                  }
                                 />
                                 {ind.isPercentage && (
                                   <span className="absolute right-1 text-[8px] md:text-[9px] text-gray-400 font-bold pointer-events-none">%</span>
@@ -1183,17 +1335,25 @@ export default function App() {
                                 <input 
                                   type="text" 
                                   value={ind.realStr ?? ind.real}
-                                  disabled={!isSingleMode}
-                                  readOnly={!isSingleMode}
+                                  disabled={!canEditInputs}
+                                  readOnly={!canEditInputs}
                                   onChange={(e) => handleInputChange(ind.id, e.target.value, 'quality', 'real')}
                                   className={`w-full h-7 text-center rounded text-[10px] md:text-[11px] font-mono font-bold transition-all shadow-xs ${
                                     ind.isPercentage ? 'pr-3.5' : ''
                                   } ${
-                                    !isSingleMode 
+                                    !canEditInputs 
                                       ? 'bg-amber-50/60 border border-amber-200 text-gray-800 cursor-default' 
+                                      : isSimulationMode
+                                      ? 'bg-purple-50/70 border border-purple-300 hover:border-purple-500 focus:border-purple-600 focus:ring-1 focus:ring-purple-600 focus:bg-white text-purple-950 cursor-text'
                                       : 'bg-white border border-gray-300 hover:border-gray-400 focus:border-[#EE2E24] focus:ring-1 focus:ring-[#EE2E24] outline-none'
                                   }`}
-                                  title={!isSingleMode ? 'Valor consolidado (somatório/média dos filtros selecionados)' : 'Clique para editar o valor realizado'}
+                                  title={
+                                    !canEditInputs 
+                                      ? 'Valor consolidado (somatório/média dos filtros selecionados)' 
+                                      : isSimulationMode 
+                                      ? 'Simulação Temporária: Clique para editar e testar cenários (não salva no banco)' 
+                                      : 'Clique para editar o valor realizado'
+                                  }
                                 />
                                 {ind.isPercentage && (
                                   <span className="absolute right-1 text-[8px] md:text-[9px] text-gray-400 font-bold pointer-events-none">%</span>
